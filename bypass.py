@@ -78,8 +78,17 @@ def bypass_cloudflare(
         if proxy:
             print(f"[*] 代理: {proxy}")
         
-        # 启动浏览器
-        with SB(uc=True, test=True, locale="en", proxy=proxy) as sb:
+        # 启动浏览器（优化资源占用）
+        # Chrome会启动多个子进程（渲染、GPU等），这是正常行为
+        with SB(
+            uc=True, 
+            test=True, 
+            locale="en", 
+            proxy=proxy,
+            headed=True,
+            disable_gpu=True,  # 禁用GPU加速减少进程
+            chromium_arg="--single-process,--disable-dev-shm-usage,--no-sandbox,--disable-setuid-sandbox"
+        ) as sb:
             print("[*] 浏览器已启动，正在加载页面...")
             
             # 打开页面
