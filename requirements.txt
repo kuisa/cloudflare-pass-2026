@@ -5,3 +5,4 @@ seleniumbase>=4.28.0    # SeleniumBase UC Mode (核心)
 loguru                  # 代码中 import loguru 用到的日志库
 pyvirtualdisplay        # Linux 环境下 setup_display 函数必须的虚拟显示库
 streamlit               # 可视化 UI 必需
+requests
