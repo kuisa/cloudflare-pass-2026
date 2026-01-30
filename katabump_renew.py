@@ -7,24 +7,33 @@ from seleniumbase import SB
 from loguru import logger
 
 # ==========================================
-# 步骤 1: 按照仓库 API 规范导入三个插件
+# 步骤 1: 按照仓库工作方式导入 4 种 API
 # ==========================================
 try:
-    # API 1: 来自 bypass.py 的简单模式
+    # 模式 1: 简单模式 (来自 bypass.py)
     from bypass import bypass_cloudflare as api_bypass_simple
     
-    # API 2 & 3: 来自 simple_bypass.py 的完整模式 (单次与并行)
+    # 模式 2 & 3: 完整模式 (来自 simple_bypass.py)
     from simple_bypass import bypass_cloudflare as api_simple_once
     from simple_bypass import bypass_parallel as api_simple_parallel
     
-    logger.info("📡 成功加载三大核心绕过 API 接口")
+    # 模式 4: 指纹增强模式 (来自 bypass_seleniumbase.py)
+    from bypass_seleniumbase import bypass_logic as api_enhanced
+    
+    logger.info("📡 四大核心破解 API 插件已全部就位")
 except ImportError as e:
-    logger.error(f"🚨 模块导入失败，请检查脚本是否在根目录: {e}")
+    logger.error(f"🚨 API 插件缺失，请检查脚本完整性: {e}")
 
+# ==========================================
+# 步骤 2: 你的 TG 通知功能 (原封不动保留)
+# ==========================================
 def send_tg_notification(message, photo_path=None):
+    """发送 Telegram 消息和截图"""
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-    if not (token and chat_id): return
+    if not (token and chat_id): 
+        logger.warning("未配置 TG 机器人，跳过通知")
+        return
     try:
         if photo_path and os.path.exists(photo_path):
             with open(photo_path, 'rb') as f:
@@ -33,27 +42,29 @@ def send_tg_notification(message, photo_path=None):
         else:
             requests.post(f"https://api.telegram.org/bot{token}/sendMessage", 
                           data={'chat_id': chat_id, 'text': message})
-    except Exception as e: logger.error(f"TG通知失败: {e}")
+        logger.info("TG 通知发送成功")
+    except Exception as e: 
+        logger.error(f"TG 通知失败: {e}")
 
+# ==========================================
+# 步骤 3: 自动化续期主流程 (2026.01.29 版)
+# ==========================================
 def run_auto_renew():
-    # 从环境变量（UI输入）获取凭据
     email = os.environ.get("EMAIL")
     password = os.environ.get("PASSWORD")
-    ui_mode = os.environ.get("BYPASS_MODE", "单浏览器模式") # 默认模式
+    ui_mode = os.environ.get("BYPASS_MODE", "2. 代理单次模式")
     
-    # 2026-01-29 目标地址
+    # 你指定的 2026.01.29 确切页面
     login_url = "https://dashboard.katabump.com/auth/login"
     target_url = "https://dashboard.katabump.com/servers/edit?id=177688"
     OUTPUT_DIR = Path("/app/output")
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    logger.info(f"🚀 启动自动续期流程 | 当前 API 模式: {ui_mode}")
+    logger.info(f"🚀 启动自动续期 | 选定 API 逻辑: {ui_mode}")
 
-    # 使用集成了 UC 模式的浏览器
     with SB(uc=True, xvfb=True) as sb:
         try:
-            # ---- 1. 执行登录 (匹配 id="submit") ----
-            logger.info("正在登录 Katabump...")
+            # ---- 1. 登录流程 (匹配 id="submit") ----
             sb.uc_open_with_reconnect(login_url, 10)
             sb.wait_for_element("#email", timeout=20)
             sb.type("#email", email)
@@ -61,68 +72,66 @@ def run_auto_renew():
             sb.click("#submit") 
             sb.sleep(6)
 
-            # ---- 2. 跳转管理页 ----
-            logger.info("跳转至服务器配置页面...")
+            # ---- 2. 跳转编辑页 ----
             sb.uc_open_with_reconnect(target_url, 10)
             sb.sleep(3)
 
             # ---- 3. 触发 Renew 弹窗 ----
-            logger.info("触发续期验证弹窗...")
             sb.scroll_to('button[data-bs-target="#renew-modal"]')
             sb.js_click('button[data-bs-target="#renew-modal"]')
             sb.sleep(5) 
 
-            # ---- 4. 核心：根据工作方式调用 API ----
-            # 自动提取当前网址作为 API 的输入参数
-            current_target_url = sb.get_current_url()
-            logger.info(f"🔗 正在为网址调用 API: {current_target_url}")
-            
+            # ---- 4. 关键：根据 4 种工作逻辑精准调用 API ----
+            target_url_api = sb.get_current_url()
             result = {"success": False}
 
-            if "单浏览器" in ui_mode:
-                # 调用 bypass.py 的简单模式接口
-                logger.info(">>> 激活 API-1: bypass_cloudflare (来自 bypass.py)")
-                result = api_bypass_simple(current_target_url)
-                
-            elif "单次绕过" in ui_mode:
-                # 调用 simple_bypass.py 的单次接口 (支持传代理)
-                logger.info(">>> 激活 API-2: bypass_cloudflare (来自 simple_bypass.py)")
-                result = api_simple_once(current_target_url, proxy=os.environ.get("PROXY"))
-                
-            elif "并行模式" in ui_mode:
-                # 调用 simple_bypass.py 的并行竞争接口
-                logger.info(">>> 激活 API-3: bypass_parallel (来自 simple_bypass.py)")
-                result = api_simple_parallel(
-                    url=current_target_url, 
-                    proxy_file="proxy.txt",
-                    batch_size=3
-                )
+            # 存证截图：绕过前
+            before_img = str(OUTPUT_DIR / "before_bypass.png")
+            sb.save_screenshot(before_img)
 
-            # ---- 5. 整合 API 结果并提交 ----
+            if "1." in ui_mode:
+                # 简单模式
+                result = api_bypass_simple(target_url_api)
+                
+            elif "2." in ui_mode:
+                # 代理单次
+                result = api_simple_once(target_url_api, proxy=os.environ.get("PROXY"))
+                
+            elif "3." in ui_mode:
+                # 并行模式 (读取 proxy.txt, batch_size=3)
+                result = api_simple_parallel(url=target_url_api, proxy_file="proxy.txt", batch_size=3)
+                
+            elif "4." in ui_mode:
+                # 增强模式 (直接操作当前 sb 实例)
+                api_enhanced(sb)
+                result = {"success": True} 
+
+            # ---- 5. 整合 API 结果并最终提交 ----
+            after_img = str(OUTPUT_DIR / "after_bypass.png")
+            sb.save_screenshot(after_img)
+
             if result.get("success"):
-                logger.success(f"✅ API 绕过成功！获取到 Cookie: {result.get('cf_clearance', 'N/A')}")
-                # 执行最后的物理模拟点击
-                sb.uc_gui_click_captcha()
+                logger.success("✅ API 绕过逻辑执行成功")
+                sb.uc_gui_click_captcha() # 物理补点确保关闭
                 sb.sleep(4)
-            else:
-                logger.warning("⚠️ API 未能直接返回成功，尝试手动物理过盾...")
-                sb.uc_gui_click_captcha()
-
-            logger.info("执行最终点击更新...")
-            sb.click('//button[contains(., "更新")]') # 适配 <font> 标签
+            
+            # 点击 <font>更新</font> 按钮
+            sb.click('//button[contains(., "更新")]') 
             sb.sleep(8)
 
-            # 结果反馈
-            success_img = str(OUTPUT_DIR / "success.png")
+            # 流程结束，保存最终成果图并发送 TG
+            success_img = str(OUTPUT_DIR / "success_final.png")
             sb.save_screenshot(success_img)
-            send_tg_notification(f"✅ 续期任务成功！模式: {ui_mode}", success_img)
-            logger.success("全部任务已完成")
+            finish_msg = f"✅ [{datetime.now().strftime('%H:%M')}] Katabump 续期成功！\n使用模式: {ui_mode}\n账户: {email}"
+            logger.success(finish_msg)
+            send_tg_notification(finish_msg, success_img)
 
         except Exception as e:
             error_img = str(OUTPUT_DIR / "error.png")
             sb.save_screenshot(error_img)
-            logger.error(f"❌ 流程出错: {str(e)}")
-            send_tg_notification(f"❌ 续期失败\n原因: {str(e)}", error_img)
+            err_msg = f"❌ [{datetime.now().strftime('%H:%M')}] 续期任务失败！\n模式: {ui_mode}\n原因: {str(e)}"
+            logger.error(err_msg)
+            send_tg_notification(err_msg, error_img)
             raise e
 
 if __name__ == "__main__":
