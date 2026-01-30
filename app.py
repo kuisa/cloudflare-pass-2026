@@ -19,7 +19,7 @@ def load_config():
 
 def save_config(tasks):
     os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
-    # 增加临时文件写入机制，防止写入一半断电导致 JSON 损坏
+    # --- 原子性写入：防止与 scheduler.py 同时写入导致文件损坏 ---
     temp_file = CONFIG_FILE + ".tmp"
     with open(temp_file, 'w', encoding='utf-8') as f:
         json.dump(tasks, f, ensure_ascii=False, indent=2)
@@ -28,7 +28,7 @@ def save_config(tasks):
 # --- 页面全局配置 ---
 st.set_page_config(page_title="矩阵自动化控制内核", layout="wide")
 
-# 自定义全中文高科技感 CSS (保持原样)
+# 自定义全中文高科技感 CSS (一个字没改)
 st.markdown("""
     <style>
     .main { background-color: #0b0e14; color: #00e5ff; font-family: 'Microsoft YaHei', sans-serif; }
@@ -73,6 +73,9 @@ with st.sidebar:
 updated_tasks = []
 st.subheader("🛰️ 任务轨道监控")
 
+# 定义北京时区用于显示计算
+bj_tz = timezone(timedelta(hours=8))
+
 for i, task in enumerate(st.session_state.tasks):
     with st.expander(f"项目识别码: {task['name']}", expanded=True):
         status_html = '<span class="status-tag active-tag">正在运行</span>' if task.get('active') else '<span class="status-tag standby-tag">待命状态</span>'
@@ -95,14 +98,15 @@ for i, task in enumerate(st.session_state.tasks):
         t1, t2, t3, t4 = st.columns([1, 1, 2, 1])
         task['freq'] = t1.number_input("同步周期 (天)", 1, 30, task.get('freq', 3), key=f"freq_{i}")
         
-        # --- 显示保护逻辑 ---
+        # --- 显示保护逻辑：增加时区感知计算 ---
         last = task.get('last_run', "从未运行")
         next_date = "等待首次运行"
         
         if last and last != "从未运行" and len(str(last)) > 10:
             try:
-                # 统一时区解析
-                next_date = (datetime.strptime(str(last), "%Y-%m-%d %H:%M:%S") + timedelta(days=task['freq'])).strftime("%Y-%m-%d")
+                # 统一北京时区解析，确保 UI 显示与后台判断完全一致
+                last_dt = datetime.strptime(str(last), "%Y-%m-%d %H:%M:%S").replace(tzinfo=bj_tz)
+                next_date = (last_dt + timedelta(days=task['freq'])).strftime("%Y-%m-%d %H:%M:%S")
             except:
                 next_date = "格式异常"
         
@@ -150,7 +154,6 @@ if bc2.button("🚀 启动全域自动化同步"):
                 process.wait()
                 if process.returncode == 0:
                     # --- 核心锁定北京时间 ---
-                    bj_tz = timezone(timedelta(hours=8))
                     current_bj_time = datetime.now(bj_tz).strftime("%Y-%m-%d %H:%M:%S")
                     task['last_run'] = current_bj_time
                     save_config(updated_tasks)
