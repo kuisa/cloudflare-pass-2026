@@ -19,14 +19,14 @@ except Exception as e:
     logger.error(f"🚨 API 加载失败: {e}")
 
 # ==========================================
-# 2. 高科技 TGUI 功能
+# 2. 高科技 TGUI 功能 (北京时间锁死)
 # ==========================================
 def send_tg_notification(status, message, photo_path=None):
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
     if not (token and chat_id): return
     
-    # 使用 timezone 确保北京时间锁死，不受服务器系统时钟干扰
+    # 强制锁死北京时间 (UTC+8)
     tz_bj = timezone(timedelta(hours=8))
     bj_time = datetime.now(tz_bj).strftime('%Y-%m-%d %H:%M:%S')
     emoji = "✅" if "成功" in status else "⚠️" if "未到期" in status else "❌"
@@ -79,7 +79,7 @@ def run_auto_renew():
             sb.js_click('button[data-bs-target="#renew-modal"]') 
             sb.sleep(6)
 
-            # ---- [步骤 C] 核心：正确调用 API ----
+            # ---- [步骤 C] 调用核心 API ----
             current_url = sb.get_current_url()
             if "1." in ui_mode: result = api_core_1(current_url)
             elif "2." in ui_mode: result = api_core_2(current_url, proxy=os.environ.get("PROXY"))
@@ -102,32 +102,32 @@ def run_auto_renew():
             
             sb.sleep(12) 
 
-            # ---- [步骤 E] 结果抓取 (核心修复区) ----
-            # 修复逻辑：强制刷新页面并等待，确保数据库更新后的日期被加载
+            # ---- [步骤 E] 结果抓取 (深度防乱码逻辑) ----
             logger.info("正在刷新页面以获取最新到期日期...")
             sb.refresh()
-            sb.sleep(8) 
+            # 增加等待，确保日期元素渲染完成
+            sb.wait_for_element_visible('//div[contains(text(), "Expiry")]', timeout=15)
+            sb.sleep(5) 
             
             final_img = str(OUTPUT_DIR / "final_result.png")
             sb.save_screenshot(final_img)
             
             page_source = sb.get_page_source()
             
-            # 改进：通过文本锚点精准提取日期，增加对乱码 katassv 的过滤
+            # 精准日期提取逻辑
             if "2026-" in page_source:
                 try:
-                    # 使用锚点 XPath 定位 Expiry 后的 div
+                    # 锚点定位：Expiry 文本后的第一个 div 兄弟
                     expiry_date = sb.get_text('//div[contains(text(), "Expiry")]/following-sibling::div')
-                    # 清洗：只提取前 10 位 (例如 2026-02-02)
+                    # 强制截断，只取 10 位，彻底杀灭 katassv
                     clean_date = expiry_date.strip()[:10]
                     
-                    # 再次保险：如果抓出来的不是以 20 开头的 10 位字符，则判定为抓取失败
                     if not clean_date.startswith("20"):
-                        raise Exception("抓取到的日期格式不规范")
+                        raise Exception("抓取格式不符")
 
                     send_tg_notification("续期成功 ✅", f"服务器续期已生效！\n📅 **下次到期**: `{clean_date}`", final_img)
                 except:
-                    # 备选方案
+                    # 备选 CSS 定位 (针对可能出现的表格结构)
                     expiry_date = sb.get_text('div.card-body div.row:nth-child(4) div.col-lg-9').strip()[:10]
                     send_tg_notification("续期成功 ✅", f"服务器续期成功！\n📅 **下次到期**: `{expiry_date}`", final_img)
             else:
