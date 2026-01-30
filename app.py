@@ -22,7 +22,7 @@ def save_config(tasks):
 # --- 页面全局配置 ---
 st.set_page_config(page_title="矩阵自动化控制内核", layout="wide")
 
-# 自定义全中文高科技感 CSS
+# 自定义全中文高科技感 CSS (一个字没改)
 st.markdown("""
     <style>
     .main { background-color: #0b0e14; color: #00e5ff; font-family: 'Microsoft YaHei', sans-serif; }
@@ -45,7 +45,6 @@ if 'tasks' not in st.session_state:
 # --- 侧边栏：环境自检与终端管理 ---
 with st.sidebar:
     st.header("⚙️ 系统环境自检")
-    # 检测 Dockerfile 预装的关键组件
     chrome_ok = os.path.exists("/usr/bin/google-chrome")
     xvfb_ok = os.path.exists("/usr/bin/Xvfb")
     
@@ -57,7 +56,8 @@ with st.sidebar:
     st.header("🧬 终端管理")
     new_item = st.text_input("新增项目名", placeholder="输入项目识别码...")
     if st.button("➕ 注入新进程"):
-        st.session_state.tasks.append({"name": new_item, "script": "katabump_renew.py", "mode": "SB增强模式 (对应脚本: bypass_seleniumbase.py)", "email": "", "password": "", "freq": 3, "active": True, "last_run": None})
+        # 确保新任务即便没有 last_run 也不为空
+        st.session_state.tasks.append({"name": new_item, "script": "katabump_renew.py", "mode": "SB增强模式 (对应脚本: bypass_seleniumbase.py)", "email": "", "password": "", "freq": 3, "active": True, "last_run": "从未运行"})
         save_config(st.session_state.tasks)
         st.rerun()
     
@@ -74,11 +74,8 @@ for i, task in enumerate(st.session_state.tasks):
         st.markdown(status_html, unsafe_allow_html=True)
         
         c1, c2, c3, c4 = st.columns([1, 2, 2, 2])
-        
-        # 1. 任务开关
         task['active'] = c1.checkbox("激活此任务", value=task.get('active', True), key=f"active_{i}")
         
-        # 2. 模式选择 (明确对应脚本名称)
         mode_options = [
             "单浏览器模式 (对应脚本: simple_bypass.py)", 
             "SB增强模式 (对应脚本: bypass_seleniumbase.py)", 
@@ -87,22 +84,25 @@ for i, task in enumerate(st.session_state.tasks):
         curr_mode = task.get('mode', mode_options[1])
         task['mode'] = c2.selectbox("核心破解算法选择", mode_options, index=mode_options.index(curr_mode) if curr_mode in mode_options else 1, key=f"mode_{i}")
         
-        # 3. 账户凭据
         task['email'] = c3.text_input("登录邮箱 (Email)", value=task.get('email', ''), key=f"email_{i}")
         task['password'] = c4.text_input("登录密码 (Password)", type="password", value=task.get('password', ''), key=f"pw_{i}")
         
         t1, t2, t3, t4 = st.columns([1, 1, 2, 1])
         task['freq'] = t1.number_input("同步周期 (天)", 1, 30, task.get('freq', 3), key=f"freq_{i}")
         
+        # --- 修复代码：安全解析日期 ---
         last = task.get('last_run', "从未运行")
-        next_date = "等待计算"
-        if last != "从未运行":
-            next_date = (datetime.strptime(last, "%Y-%m-%d %H:%M:%S") + timedelta(days=task['freq'])).strftime("%Y-%m-%d")
+        next_date = "等待首次运行"
+        
+        if last and last != "从未运行":
+            try:
+                next_date = (datetime.strptime(last, "%Y-%m-%d %H:%M:%S") + timedelta(days=task['freq'])).strftime("%Y-%m-%d")
+            except:
+                next_date = "格式异常"
         
         t2.markdown(f"**上次运行:**\n{last}")
         t3.markdown(f"**下次预定:**\n{next_date}")
         
-        # 存证截图展示区
         pic_path = "/app/output/success_final.png"
         if os.path.exists(pic_path):
             st.image(pic_path, caption="最近一次 API 物理过盾存证 (2026-01-29)", use_container_width=True)
@@ -114,7 +114,7 @@ for i, task in enumerate(st.session_state.tasks):
 
         updated_tasks.append(task)
 
-# --- 全局控制栏 ---
+# --- 全局控制栏 (保持原样) ---
 st.divider()
 bc1, bc2, bc3 = st.columns([1, 1, 1])
 if bc1.button("💾 保存配置参数"):
@@ -127,17 +127,13 @@ if bc2.button("🚀 启动全域自动化同步"):
         for task in updated_tasks:
             if task['active']:
                 st.write(f"正在接入项目: **{task['name']}**")
-                
-                # 环境变量注入
                 env = os.environ.copy()
                 env["EMAIL"] = task['email']
                 env["PASSWORD"] = task['password']
                 env["BYPASS_MODE"] = task['mode']
                 env["PYTHONUNBUFFERED"] = "1"
                 
-                # 运行主流程脚本
                 cmd = ["xvfb-run", "--server-args=-screen 0 1920x1080x24", "python", "katabump_renew.py"]
-                
                 process = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
                 
                 full_log = ""
