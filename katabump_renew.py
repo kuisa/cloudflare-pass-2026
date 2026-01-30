@@ -1,13 +1,13 @@
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 import requests
 from seleniumbase import SB
 from loguru import logger
 
 # ==========================================
-# 1. 严格按照仓库 API 逻辑进行函数导入 (完全不改)
+# 1. 严格按照仓库 API 逻辑进行函数导入 (保持原样)
 # ==========================================
 try:
     # API 1: 简单模式 (bypass.py)
@@ -19,18 +19,18 @@ try:
     from bypass_seleniumbase import bypass_logic as api_core_4
     logger.info("📡 核心 API 插件已成功挂载至主程序")
 except Exception as e:
-    logger.error(f"🚨 API 加载失败，请检查文件层级: {e}")
+    logger.error(f"🚨 API 加载失败: {e}")
 
 # ==========================================
-# 2. 高科技 TG UI 格式化功能
+# 2. 高科技 TGUI 功能 (北京时间 + 状态判断)
 # ==========================================
 def send_tg_notification(status, message, photo_path=None):
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
     if not (token and chat_id): return
     
-    # 构造更美观的 TGUI
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    # 强制转换为北京时间 (UTC+8)
+    bj_time = (datetime.utcnow() + timedelta(hours=8)).strftime('%Y-%m-%d %H:%M:%S')
     emoji = "✅" if "成功" in status else "⚠️" if "未到期" in status else "❌"
     
     formatted_msg = (
@@ -39,7 +39,7 @@ def send_tg_notification(status, message, photo_path=None):
         f"👤 **账户**: `{os.environ.get('EMAIL', 'Unknown')}`\n"
         f"📡 **状态**: {status}\n"
         f"📝 **详情**: {message}\n"
-        f"🕒 **时间**: {now}\n"
+        f"🕒 **北京时间**: `{bj_time}`\n"
         f"━━━━━━━━━━━━━━━━━━"
     )
 
@@ -54,7 +54,7 @@ def send_tg_notification(status, message, photo_path=None):
     except Exception as e: logger.error(f"TG通知失败: {e}")
 
 # ==========================================
-# 3. 自动化续期主流程 (逻辑增强版)
+# 3. 自动化续期主流程 (API 调用对齐)
 # ==========================================
 def run_auto_renew():
     email = os.environ.get("EMAIL")
@@ -81,7 +81,7 @@ def run_auto_renew():
             sb.js_click('button[data-bs-target="#renew-modal"]') # 触发验证弹窗
             sb.sleep(6)
 
-            # ---- [步骤 C] 核心：API 调用 (保持原逻辑) ----
+            # ---- [步骤 C] 核心：正确调用 API ----
             current_url = sb.get_current_url()
             logger.info(f">>> 正在按原作者逻辑调用 API: {ui_mode}")
 
@@ -95,41 +95,42 @@ def run_auto_renew():
                 api_core_4(sb)
                 result = {"success": True}
 
-            # ---- [步骤 D] 整合成果与提交 (精准修复可见性问题) ----
+            # ---- [步骤 D] 整合成果与精准点击 ----
             sb.uc_gui_click_captcha()
-            logger.info("验证已完成，进入 20 秒脚本启动与稳定缓冲期...")
-            sb.sleep(20) 
+            logger.info("验证已完成，进入 20 秒稳定缓冲期...")
+            sb.sleep(20) # 按照要求：给 20 秒时间让脚本启动过人机验证并稳定
             
-            # 修复：增加 wait_for_element_visible 确保按钮完全渲染并显示
-            logger.info("正在等待 Renew 提交按钮进入可见状态...")
+            # 精准打击：根据 HTML 源码定位 Renew 按钮
+            logger.info("执行最终 Renew 提交点击...")
             try:
-                # 将等待时间从默认的 7 秒手动提升，并确保元素 visible
-                sb.wait_for_element_visible('button[type="submit"].btn-primary', timeout=30)
-                sb.click('button[type="submit"].btn-primary')
-                logger.info("执行最终 Renew 提交点击成功")
-            except Exception as e:
-                logger.warning(f"常规点击失败，尝试使用 JS 强制穿透点击: {e}")
-                sb.js_click('button[type="submit"].btn-primary') # 最后的兜底方案
+                # 优先点击 id 为 renew-modal 容器下的 primary 按钮
+                sb.wait_for_element_visible('#renew-modal button[type="submit"].btn-primary', timeout=20)
+                sb.click('#renew-modal button[type="submit"].btn-primary')
+            except:
+                # 兜底：使用 JS 强制点击
+                sb.js_click('#renew-modal button.btn-primary')
             
-            sb.sleep(10) # 等待结果反馈加载
+            sb.sleep(12) # 等待页面刷新处理
 
-            # ---- [步骤 E] 结果捕获与智能通知 ----
+            # ---- [步骤 E] 结果抓取与智能通知 ----
             final_img = str(OUTPUT_DIR / "final_result.png")
             sb.save_screenshot(final_img)
             
-            # 获取页面文字内容判断状态
-            page_text = sb.get_page_source()
+            # 读取页面源码分析结果
+            page_source = sb.get_page_source()
             
-            if "2026-" in page_text:
-                # 抓取到期时间：<div class="col-lg-9 col-md-8">2026-02-02</div>
+            # 逻辑：检查页面是否出现了新的日期格式
+            if "2026-" in page_source:
                 try:
-                    expiry_date = sb.get_text('div.col-lg-9.col-md-8')
-                    send_tg_notification("续期成功 ✅", f"服务器已成功续命！\n📅 **下次到期**: `{expiry_date}`", final_img)
+                    # 使用 Expiry 邻近节点定位抓取具体日期：<div class="col-lg-9 col-md-8">2026-02-02</div>
+                    expiry_date = sb.get_text('//div[contains(text(), "Expiry")]/following-sibling::div')
+                    send_tg_notification("续期成功 ✅", f"服务器续期已生效！\n📅 **下次到期**: `{expiry_date}`", final_img)
                 except:
-                    send_tg_notification("续期成功 ✅", "续期已完成，但未抓取到具体日期。", final_img)
+                    # 备选提取方式
+                    expiry_date = sb.get_text('div.col-lg-9.col-md-8')
+                    send_tg_notification("续期成功 ✅", f"服务器续期成功！\n📅 **下次到期**: `{expiry_date}`", final_img)
             else:
-                # 判定为还没到续期时间
-                send_tg_notification("未到期 ⚠️", "目前尚未达到可续期的时间点，请稍后再试。", final_img)
+                send_tg_notification("未到期 ⚠️", "验证已过但页面未更新日期，可能尚未达到可续期时间。", final_img)
 
         except Exception as e:
             error_img = str(OUTPUT_DIR / "error.png")
