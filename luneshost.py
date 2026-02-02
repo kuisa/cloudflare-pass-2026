@@ -69,7 +69,7 @@ def run_auto_renew():
     OUTPUT_DIR = Path("/app/output")
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    with SB(uc=True, xvfb=True) as sb:
+with SB(uc=True, xvfb=True) as sb:
         try:
             # ---- [步骤 A] 直接打开登录页 ----
             logger.info(f"正在直接访问登录页面: {login_url}")
@@ -77,20 +77,17 @@ def run_auto_renew():
 
             # ---- [步骤 B] 填写登录表单 ----
             logger.info("正在定位表单元素...")
-            # 增加显式等待，防止页面加载慢
             sb.wait_for_element_visible("#email", timeout=25)
             sb.type("#email", email)
             sb.type("#password", password)
             
             # ---- [步骤 C] 调用核心 API 处理人机验证 ----
-            # 注意：在点击登录前，必须确保 CF 验证已通过
             current_url = sb.get_current_url()
             if "1." in ui_mode: api_core_1(current_url)
             elif "2." in ui_mode: api_core_2(current_url, proxy=os.environ.get("PROXY"))
             elif "3." in ui_mode: api_core_3(url=current_url, proxy_file="proxy.txt", batch_size=3)
             elif "4." in ui_mode: api_core_4(sb)
             
-            # 尝试点击 CF 复选框（如果存在）
             try:
                 sb.uc_gui_click_captcha()
             except:
@@ -98,23 +95,41 @@ def run_auto_renew():
                 
             sb.sleep(5)
             
-            # 点击登录提交
-            logger.info("点击 Continue 按钮...")
-            sb.click('button.submit-btn')
+            # ---- [步骤 D] 增强登录点击逻辑 ----
+            logger.info("开始尝试点击登录按钮...")
+            # 兼容多种可能的按钮选择器
+            submit_selectors = ['button.submit-btn', 'button:contains("Continue")', 'input[type="submit"]']
+            clicked = False
+            for selector in submit_selectors:
+                if sb.is_element_visible(selector):
+                    sb.wait_for_element_clickable(selector, timeout=5)
+                    sb.click(selector)
+                    clicked = True
+                    break
             
-            # 验证登录是否成功：检查是否跳转到了 Dashboard
-            sb.wait_for_condition(lambda d: "login" not in d.current_url, timeout=20)
-            logger.info("登录成功，正在进入控制台...")
+            if not clicked:
+                logger.warning("未找到按钮，尝试回车登录")
+                sb.press_keys("#password", "\n")
+            
+            # 核心修复：替换掉报错的语法，改为 SeleniumBase 原生等待
+            logger.info("等待登录跳转中...")
+            sb.wait_for_url_not_contains("login", timeout=30) 
             sb.sleep(5)
 
-            # ---- [步骤 D] 进入服务器详情页 (ID: 52794) ----
-            logger.info("正在定位服务器卡片 52794...")
-            # 如果在 Dashboard 页面找不到，尝试直接访问详情页 URL
+            # ---- [步骤 E] 直接强攻详情页 (解决“点不到”的核心点) ----
             target_server_url = "https://betadash.lunes.host/servers/52794"
-            sb.uc_open_with_reconnect(target_server_url, 10)
+            logger.info(f"不再在主页寻找，直接强行跳转详情页: {target_server_url}")
+            # 使用带重连的打开方式，确保在低内存环境下也能加载出详情页
+            sb.uc_open_with_reconnect(target_server_url, 15)
             
-            # ---- [步骤 E] 执行停留与保活刷新 ----
-            logger.info(f"成功进入服务器控制台，执行停留 {stay_time} 秒...")
+            # 检查是否成功进入详情页（以 URL 包含 ID 为准）
+            if "52794" not in sb.get_current_url():
+                logger.error("强制跳转失败，尝试第二次跳转...")
+                sb.open(target_server_url)
+                sb.sleep(5)
+
+            # ---- [步骤 F] 执行停留与保活刷新 ----
+            logger.info(f"成功进入服务器控制台 (URL: {sb.get_current_url()})，执行停留 {stay_time} 秒...")
             sb.sleep(stay_time)
             
             for i in range(refresh_count):
@@ -122,7 +137,7 @@ def run_auto_renew():
                 sb.refresh()
                 sb.sleep(refresh_interval)
 
-            # ---- [步骤 F] 成果记录与TG推送 ----
+            # ---- [步骤 G] 成果记录与TG推送 ----
             final_img = str(OUTPUT_DIR / "final_result.png")
             sb.save_screenshot(final_img)
             send_tg_notification(
@@ -134,6 +149,8 @@ def run_auto_renew():
         except Exception as e:
             error_img = str(OUTPUT_DIR / "error.png")
             sb.save_screenshot(error_img)
+            # 记录错误并发送通知
+            logger.error(f"Lunes 流程异常: {str(e)}")
             send_tg_notification("执行异常 ❌", f"Lunes 流程中断: `{str(e)}`", error_img)
             raise e
 
