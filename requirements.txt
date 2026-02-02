@@ -1,8 +1,15 @@
-# Cloudflare Turnstile 绕过工具 - 核心依赖
-seleniumbase>=4.28.0    # 提供 UC 模式及人机验证绕过核心
-loguru                  # 强大的日志管理库
-pyvirtualdisplay        # Linux 虚拟显示环境支持
-streamlit               # 构建可视化管理面板
-requests                # 用于发送 Telegram 通知
-PyAutoGUI               # 部分模式可能依赖的自动化控制库
-PySimpleGUI             # 某些图形组件的依赖
+# --- 核心引擎与反检测 ---
+seleniumbase>=4.28.0    # 核心：提供 UC 模式绕过 Cloudflare
+loguru                  # 核心：自动化任务日志追踪
+
+# --- 自动化环境与调度 ---
+pyvirtualdisplay        # Linux 容器内运行 Chrome 的虚拟显示支持
+apscheduler             # 建议增加：用于更稳定的定时任务调度逻辑
+
+# --- UI 面板与网络 ---
+streamlit               # 构建高科技感管理后台
+requests                # 用于 Telegram 消息推送及 API 调用
+
+# --- 兼容性补充 (按需保留) ---
+# PyAutoGUI             # 除非你的 bypass 逻辑里明确用了坐标点击，否则在 headless 环境下建议移除
+# PySimpleGUI           # 你的 UI 已经全面转向 Streamlit，此库可以移除
