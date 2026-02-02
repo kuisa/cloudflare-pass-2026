@@ -19,7 +19,6 @@ def load_config():
 
 def save_config(tasks):
     os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
-    # --- 原子性写入：防止与 scheduler.py 同时写入导致文件损坏 ---
     temp_file = CONFIG_FILE + ".tmp"
     with open(temp_file, 'w', encoding='utf-8') as f:
         json.dump(tasks, f, ensure_ascii=False, indent=2)
@@ -28,7 +27,7 @@ def save_config(tasks):
 # --- 页面全局配置 ---
 st.set_page_config(page_title="矩阵自动化控制内核", layout="wide")
 
-# 自定义全中文高科技感 CSS (一个字没改)
+# 自定义全中文高科技感 CSS (完全保留)
 st.markdown("""
     <style>
     .main { background-color: #0b0e14; color: #00e5ff; font-family: 'Microsoft YaHei', sans-serif; }
@@ -43,17 +42,16 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 st.title("🛡️ 矩阵自动化控制内核")
-st.caption("版本: 2026.01.29 | 核心架构: 多模式集成分流 | 语言: 简体中文")
+st.caption("版本: 2026.02.03 | 核心架构: 任务级自治驱动 | 语言: 简体中文")
 
 if 'tasks' not in st.session_state:
     st.session_state.tasks = load_config()
 
-# --- 侧边栏：环境自检与终端管理 ---
+# --- 侧边栏：终端管理 ---
 with st.sidebar:
     st.header("⚙️ 系统环境自检")
     chrome_ok = os.path.exists("/usr/bin/google-chrome")
     xvfb_ok = os.path.exists("/usr/bin/Xvfb")
-    
     c1, c2 = st.columns(2)
     c1.metric("Chrome 内核", "就绪" if chrome_ok else "缺失")
     c2.metric("虚拟显示器", "在线" if xvfb_ok else "离线")
@@ -61,104 +59,108 @@ with st.sidebar:
     st.divider()
     st.header("🧬 终端管理")
     new_item = st.text_input("新增项目名", placeholder="输入项目识别码...")
+    script_options = ["katabump_renew.py", "luneshost.py"]
+    selected_script = st.selectbox("业务逻辑脚本选择", script_options)
+    
     if st.button("➕ 注入新进程"):
-        st.session_state.tasks.append({"name": new_item, "script": "katabump_renew.py", "mode": "SB增强模式 (对应脚本: bypass_seleniumbase.py)", "email": "", "password": "", "freq": 3, "active": True, "last_run": "从未运行"})
+        new_task = {
+            "name": new_item, 
+            "script": selected_script, 
+            "mode": "SB增强模式 (对应脚本: bypass_seleniumbase.py)", 
+            "email": "", "password": "", "freq": 3, "active": True, "last_run": "从未运行"
+        }
+        if selected_script == "luneshost.py":
+            new_task.update({"stay_time": 10, "refresh_count": 3, "refresh_interval": 5})
+        st.session_state.tasks.append(new_task)
         save_config(st.session_state.tasks)
         st.rerun()
-    
-    st.divider()
-    st.info("💡 提示: 所有的运行截图将保存在 /app/output 目录下。")
 
-# --- 任务配置区 ---
-updated_tasks = []
+# --- 任务轨道监控 ---
 st.subheader("🛰️ 任务轨道监控")
-
-# 定义北京时区用于显示计算
 bj_tz = timezone(timedelta(hours=8))
+updated_tasks = st.session_state.tasks
 
-for i, task in enumerate(st.session_state.tasks):
-    with st.expander(f"项目识别码: {task['name']}", expanded=True):
+for i, task in enumerate(updated_tasks):
+    with st.expander(f"项目: {task['name']} | 脚本: {task.get('script', '未知')}", expanded=True):
         status_html = '<span class="status-tag active-tag">正在运行</span>' if task.get('active') else '<span class="status-tag standby-tag">待命状态</span>'
         st.markdown(status_html, unsafe_allow_html=True)
         
+        # 基础输入区
         c1, c2, c3, c4 = st.columns([1, 2, 2, 2])
-        task['active'] = c1.checkbox("激活此任务", value=task.get('active', True), key=f"active_{i}")
-        
-        mode_options = [
-            "单浏览器模式 (对应脚本: simple_bypass.py)", 
-            "SB增强模式 (对应脚本: bypass_seleniumbase.py)", 
-            "并行竞争模式 (对应脚本: bypass.py)"
-        ]
+        task['active'] = c1.checkbox("激活", value=task.get('active', True), key=f"active_{i}")
+        mode_options = ["单浏览器模式 (对应脚本: simple_bypass.py)", "SB增强模式 (对应脚本: bypass_seleniumbase.py)", "并行竞争模式 (对应脚本: bypass.py)"]
         curr_mode = task.get('mode', mode_options[1])
-        task['mode'] = c2.selectbox("核心破解算法选择", mode_options, index=mode_options.index(curr_mode) if curr_mode in mode_options else 1, key=f"mode_{i}")
-        
-        task['email'] = c3.text_input("登录邮箱 (Email)", value=task.get('email', ''), key=f"email_{i}")
-        task['password'] = c4.text_input("登录密码 (Password)", type="password", value=task.get('password', ''), key=f"pw_{i}")
-        
-        t1, t2, t3, t4 = st.columns([1, 1, 2, 1])
+        task['mode'] = c2.selectbox("破解算法", mode_options, index=mode_options.index(curr_mode) if curr_mode in mode_options else 1, key=f"mode_{i}")
+        task['email'] = c3.text_input("Email", value=task.get('email', ''), key=f"email_{i}")
+        task['password'] = c4.text_input("Password", type="password", value=task.get('password', ''), key=f"pw_{i}")
+
+        # Lunes 专项参数区
+        if task.get('script') == "luneshost.py":
+            st.markdown("---")
+            st.markdown("🛠️ **Lunes.host 专项保活参数**")
+            l1, l2, l3 = st.columns(3)
+            task['stay_time'] = l1.number_input("停留时长 (秒)", 5, 300, task.get('stay_time', 10), key=f"stay_{i}")
+            task['refresh_count'] = l2.number_input("刷新次数", 1, 20, task.get('refresh_count', 3), key=f"count_{i}")
+            task['refresh_interval'] = l3.number_input("刷新间隔 (秒)", 1, 60, task.get('refresh_interval', 5), key=f"interval_{i}")
+
+        st.markdown("---")
+        t1, t2, t3 = st.columns([1, 2, 2])
         task['freq'] = t1.number_input("同步周期 (天)", 1, 30, task.get('freq', 3), key=f"freq_{i}")
         
-        # --- 显示保护逻辑：增加时区感知计算 ---
         last = task.get('last_run', "从未运行")
         next_date = "等待首次运行"
-        
-        if last and last != "从未运行" and len(str(last)) > 10:
+        if last and last != "从未运行":
             try:
-                # 统一北京时区解析，确保 UI 显示与后台判断完全一致
                 last_dt = datetime.strptime(str(last), "%Y-%m-%d %H:%M:%S").replace(tzinfo=bj_tz)
                 next_date = (last_dt + timedelta(days=task['freq'])).strftime("%Y-%m-%d %H:%M:%S")
-            except:
-                next_date = "格式异常"
+            except: next_date = "格式异常"
         
-        t2.markdown(f"**上次运行:**\n{last}")
-        t3.markdown(f"**下次预定:**\n{next_date}")
+        t2.markdown(f"**上次运行:** {last}")
+        t3.markdown(f"**下次预定:** {next_date}")
+
+        # 核心按钮区：保存配置、启动同步、移除任务 (按顺序排列)
+        st.markdown("---")
+        btn_col1, btn_col2, btn_col3, btn_col4 = st.columns([1, 1, 1, 1])
         
-        pic_path = "/app/output/success_final.png"
-        if os.path.exists(pic_path):
-            st.image(pic_path, caption="最近一次 API 物理过盾存证", use_container_width=True)
+        if btn_col1.button("💾 保存配置", key=f"save_{i}"):
+            save_config(updated_tasks)
+            st.success(f"项目 {task['name']} 配置已持久化")
 
-        if t4.button("🗑️ 移除任务", key=f"del_{i}"):
-            st.session_state.tasks.pop(i)
-            save_config(st.session_state.tasks)
-            st.rerun()
-
-        updated_tasks.append(task)
-
-st.divider()
-bc1, bc2, bc3 = st.columns([1, 1, 1])
-if bc1.button("💾 保存配置参数"):
-    save_config(updated_tasks)
-    st.success("配置已存入持久化扇区")
-
-if bc2.button("🚀 启动全域自动化同步"):
-    log_area = st.empty()
-    with st.status("正在建立神经链接...", expanded=True) as status:
-        for task in updated_tasks:
-            if task['active']:
-                st.write(f"正在接入项目: **{task['name']}**")
+        if btn_col2.button("🚀 启动同步", key=f"run_{i}"):
+            log_area = st.empty()
+            with st.status(f"正在建立 {task['name']} 神经链接...", expanded=True) as status:
                 env = os.environ.copy()
-                env["EMAIL"] = task['email']
-                env["PASSWORD"] = task['password']
-                env["BYPASS_MODE"] = task['mode']
-                env["PYTHONUNBUFFERED"] = "1"
+                env.update({"EMAIL": task['email'], "PASSWORD": task['password'], "BYPASS_MODE": task['mode'], "PYTHONUNBUFFERED": "1"})
+                if task.get('script') == "luneshost.py":
+                    env.update({"STAY_TIME": str(task.get('stay_time', 10)), "REFRESH_COUNT": str(task.get('refresh_count', 3)), "REFRESH_INTERVAL": str(task.get('refresh_interval', 5))})
                 
-                cmd = ["xvfb-run", "--server-args=-screen 0 1920x1080x24", "python", "katabump_renew.py"]
+                target_script = task.get('script', 'katabump_renew.py')
+                cmd = ["xvfb-run", "--server-args=-screen 0 1920x1080x24", "python", target_script]
                 process = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
                 
                 full_log = ""
                 for line in process.stdout:
                     full_log += line
-                    display_log = "\n".join(full_log.splitlines()[-20:])
-                    log_area.code(f"管理员终端@矩阵:~$ \n{display_log}")
+                    log_area.code(f"Terminal@Matrix:~$ \n" + "\n".join(full_log.splitlines()[-15:]))
                 
                 process.wait()
                 if process.returncode == 0:
-                    # --- 核心锁定北京时间 ---
-                    current_bj_time = datetime.now(bj_tz).strftime("%Y-%m-%d %H:%M:%S")
-                    task['last_run'] = current_bj_time
+                    task['last_run'] = datetime.now(bj_tz).strftime("%Y-%m-%d %H:%M:%S")
                     save_config(updated_tasks)
-                    st.success(f"项目 {task['name']} 处理成功")
+                    status.update(label=f"项目 {task['name']} 同步成功", state="complete")
+                    st.toast(f"{task['name']} 任务圆满完成", icon="✅")
                 else:
-                    st.error(f"项目 {task['name']} 运行中断")
-        
-        status.update(label="所有预定任务同步完毕", state="complete", expanded=False)
+                    status.update(label=f"项目 {task['name']} 运行异常", state="error")
+
+        if btn_col3.button("🗑️ 移除任务", key=f"del_{i}"):
+            st.session_state.tasks.pop(i)
+            save_config(st.session_state.tasks)
+            st.rerun()
+
+        # 截图存证展示
+        pic_path = "/app/output/final_result.png" if task.get('script') == "luneshost.py" else "/app/output/success_final.png"
+        if os.path.exists(pic_path):
+            st.image(pic_path, caption=f"项目 {task['name']} 实时运行存证", use_container_width=True)
+
+st.divider()
+st.info("💡 独立内核架构：每个项目拥有独立的执行环境与配置扇区，互不干扰。")
