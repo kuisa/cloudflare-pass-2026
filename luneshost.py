@@ -54,6 +54,12 @@ def send_tg_notification(status, message, photo_path=None):
 # ==========================================
 # 3. 自动化续期主流程 (Lunes.host 专项版)
 # ==========================================
+
+# 修正：将关键路径与URL定义提到全局，防止异常处理时出现 NameError
+login_url = "https://betadash.lunes.host/login?next=/"
+OUTPUT_DIR = Path("/app/output")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
 def run_auto_renew():
     email = os.environ.get("EMAIL")
     password = os.environ.get("PASSWORD")
@@ -64,12 +70,7 @@ def run_auto_renew():
     refresh_count = int(os.environ.get("REFRESH_COUNT", 3))
     refresh_interval = int(os.environ.get("REFRESH_INTERVAL", 5))
     
-    # 修正：直接访问 Beta 登录页面，避免跳转干扰
-    login_url = "https://betadash.lunes.host/login?next=/"
-    OUTPUT_DIR = Path("/app/output")
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-with SB(uc=True, xvfb=True) as sb:
+    with SB(uc=True, xvfb=True) as sb:
         try:
             # ---- [步骤 A] 直接打开登录页 ----
             logger.info(f"正在直接访问登录页面: {login_url}")
