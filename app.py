@@ -27,17 +27,19 @@ def save_config(tasks):
 # --- 页面全局配置 ---
 st.set_page_config(page_title="矩阵自动化控制内核", layout="wide")
 
-# 自定义全中文高科技感 CSS (完全保留)
+# 自定义全中文高科技感 CSS (完全保留，仅微调间距以缩小卡片)
 st.markdown("""
     <style>
     .main { background-color: #0b0e14; color: #00e5ff; font-family: 'Microsoft YaHei', sans-serif; }
-    .stButton>button { background: linear-gradient(45deg, #00e5ff, #0055ff); color: white; border: none; font-weight: bold; width: 100%; height: 3em; border-radius: 8px; box-shadow: 0 0 10px rgba(0,229,255,0.3); }
+    .stButton>button { background: linear-gradient(45deg, #00e5ff, #0055ff); color: white; border: none; font-weight: bold; width: 100%; height: 2.5em; border-radius: 8px; box-shadow: 0 0 10px rgba(0,229,255,0.3); font-size: 0.9em; }
     .stButton>button:hover { box-shadow: 0 0 20px #00e5ff; transform: translateY(-2px); }
-    .stExpander { border: 1px solid #00e5ff !important; background-color: #12161f !important; border-radius: 10px; }
-    .status-tag { padding: 3px 10px; border-radius: 15px; font-size: 0.8em; font-weight: bold; }
+    .stExpander { border: 1px solid #00e5ff !important; background-color: #12161f !important; border-radius: 10px; margin-bottom: -10px !important; }
+    .status-tag { padding: 2px 8px; border-radius: 12px; font-size: 0.75em; font-weight: bold; }
     .active-tag { background-color: rgba(0, 255, 128, 0.2); color: #00ff80; border: 1px solid #00ff80; }
     .status-tag.standby-tag { background-color: rgba(255, 255, 255, 0.1); color: #888; border: 1px solid #555; }
-    code { background-color: #000 !important; color: #00ff80 !important; border: 1px solid #333; }
+    code { background-color: #000 !important; color: #00ff80 !important; border: 1px solid #333; font-size: 0.85em !important; }
+    /* 缩小输入框间距 */
+    div[data-testid="stVerticalBlock"] > div { padding-top: 0.1rem !important; padding-bottom: 0.1rem !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -81,31 +83,33 @@ bj_tz = timezone(timedelta(hours=8))
 updated_tasks = st.session_state.tasks
 
 for i, task in enumerate(updated_tasks):
-    with st.expander(f"项目: {task['name']} | 脚本: {task.get('script', '未知')}", expanded=True):
+    # 缩小卡片标题栏占用
+    with st.expander(f"项目: {task['name']} ({task.get('script', '未知')})", expanded=True):
+        # 紧凑状态栏
+        c_status, c_void = st.columns([1, 5])
         status_html = '<span class="status-tag active-tag">正在运行</span>' if task.get('active') else '<span class="status-tag standby-tag">待命状态</span>'
-        st.markdown(status_html, unsafe_allow_html=True)
+        c_status.markdown(status_html, unsafe_allow_html=True)
         
-        # 基础输入区
-        c1, c2, c3, c4 = st.columns([1, 2, 2, 2])
+        # 基础输入区 - 紧凑排布
+        c1, c2, c3, c4 = st.columns([0.8, 2.2, 2, 2])
         task['active'] = c1.checkbox("激活", value=task.get('active', True), key=f"active_{i}")
         mode_options = ["单浏览器模式 (对应脚本: simple_bypass.py)", "SB增强模式 (对应脚本: bypass_seleniumbase.py)", "并行竞争模式 (对应脚本: bypass.py)"]
         curr_mode = task.get('mode', mode_options[1])
         task['mode'] = c2.selectbox("破解算法", mode_options, index=mode_options.index(curr_mode) if curr_mode in mode_options else 1, key=f"mode_{i}")
-        task['email'] = c3.text_input("Email", value=task.get('email', ''), key=f"email_{i}")
-        task['password'] = c4.text_input("Password", type="password", value=task.get('password', ''), key=f"pw_{i}")
+        task['email'] = c3.text_input("Email", value=task.get('email', ''), key=f"email_{i}", label_visibility="collapsed", placeholder="Email")
+        task['password'] = c4.text_input("Password", type="password", value=task.get('password', ''), key=f"pw_{i}", label_visibility="collapsed", placeholder="Password")
 
-        # Lunes 专项参数区
+        # Lunes 专项参数区 - 紧凑排布
         if task.get('script') == "luneshost.py":
-            st.markdown("---")
-            st.markdown("🛠️ **Lunes.host 专项保活参数**")
-            l1, l2, l3 = st.columns(3)
-            task['stay_time'] = l1.number_input("停留时长 (秒)", 5, 300, task.get('stay_time', 10), key=f"stay_{i}")
-            task['refresh_count'] = l2.number_input("刷新次数", 1, 20, task.get('refresh_count', 3), key=f"count_{i}")
-            task['refresh_interval'] = l3.number_input("刷新间隔 (秒)", 1, 60, task.get('refresh_interval', 5), key=f"interval_{i}")
+            l1, l2, l3, l4 = st.columns([1.5, 1, 1, 1])
+            l1.markdown("🛠️ **Lunes 专项参数:**")
+            task['stay_time'] = l2.number_input("停留(秒)", 5, 300, task.get('stay_time', 10), key=f"stay_{i}")
+            task['refresh_count'] = l3.number_input("刷新(次)", 1, 20, task.get('refresh_count', 3), key=f"count_{i}")
+            task['refresh_interval'] = l4.number_input("间隔(秒)", 1, 60, task.get('refresh_interval', 5), key=f"interval_{i}")
 
-        st.markdown("---")
-        t1, t2, t3 = st.columns([1, 2, 2])
-        task['freq'] = t1.number_input("同步周期 (天)", 1, 30, task.get('freq', 3), key=f"freq_{i}")
+        # 运行状态与周期 - 紧凑排布
+        t1, t2, t3 = st.columns([1.5, 2.5, 2.5])
+        task['freq'] = t1.number_input("周期(天)", 1, 30, task.get('freq', 3), key=f"freq_{i}")
         
         last = task.get('last_run', "从未运行")
         next_date = "等待首次运行"
@@ -115,20 +119,19 @@ for i, task in enumerate(updated_tasks):
                 next_date = (last_dt + timedelta(days=task['freq'])).strftime("%Y-%m-%d %H:%M:%S")
             except: next_date = "格式异常"
         
-        t2.markdown(f"**上次运行:** {last}")
-        t3.markdown(f"**下次预定:** {next_date}")
+        t2.markdown(f"**上次:** `{last}`")
+        t3.markdown(f"**下次:** `{next_date}`")
 
-        # 核心按钮区：保存配置、启动同步、移除任务 (按顺序排列)
-        st.markdown("---")
-        btn_col1, btn_col2, btn_col3, btn_col4 = st.columns([1, 1, 1, 1])
+        # 核心按钮区：保存配置、启动同步、移除任务
+        btn_col1, btn_col2, btn_col3, btn_col4 = st.columns([1, 1, 1, 2])
         
-        if btn_col1.button("💾 保存配置", key=f"save_{i}"):
+        if btn_col1.button("💾 保存", key=f"save_{i}"):
             save_config(updated_tasks)
-            st.success(f"项目 {task['name']} 配置已持久化")
+            st.success(f"已保存")
 
-        if btn_col2.button("🚀 启动同步", key=f"run_{i}"):
+        if btn_col2.button("🚀 同步", key=f"run_{i}"):
             log_area = st.empty()
-            with st.status(f"正在建立 {task['name']} 神经链接...", expanded=True) as status:
+            with st.status(f"建立神经链接...", expanded=True) as status:
                 env = os.environ.copy()
                 env.update({"EMAIL": task['email'], "PASSWORD": task['password'], "BYPASS_MODE": task['mode'], "PYTHONUNBUFFERED": "1"})
                 if task.get('script') == "luneshost.py":
@@ -141,26 +144,23 @@ for i, task in enumerate(updated_tasks):
                 full_log = ""
                 for line in process.stdout:
                     full_log += line
-                    log_area.code(f"Terminal@Matrix:~$ \n" + "\n".join(full_log.splitlines()[-15:]))
+                    log_area.code(f"Terminal@Matrix:~$ \n" + "\n".join(full_log.splitlines()[-10:]))
                 
                 process.wait()
                 if process.returncode == 0:
                     task['last_run'] = datetime.now(bj_tz).strftime("%Y-%m-%d %H:%M:%S")
                     save_config(updated_tasks)
-                    status.update(label=f"项目 {task['name']} 同步成功", state="complete")
-                    st.toast(f"{task['name']} 任务圆满完成", icon="✅")
+                    status.update(label=f"同步成功", state="complete")
+                    st.toast(f"任务完成", icon="✅")
                 else:
-                    status.update(label=f"项目 {task['name']} 运行异常", state="error")
+                    status.update(label=f"运行异常", state="error")
 
-        if btn_col3.button("🗑️ 移除任务", key=f"del_{i}"):
+        if btn_col3.button("🗑️ 移除", key=f"del_{i}"):
             st.session_state.tasks.pop(i)
             save_config(st.session_state.tasks)
             st.rerun()
 
-        # 截图存证展示
-        pic_path = "/app/output/final_result.png" if task.get('script') == "luneshost.py" else "/app/output/success_final.png"
-        if os.path.exists(pic_path):
-            st.image(pic_path, caption=f"项目 {task['name']} 实时运行存证", use_container_width=True)
+        # 已移除截图显示代码
 
 st.divider()
-st.info("💡 独立内核架构：每个项目拥有独立的执行环境与配置扇区，互不干扰。")
+st.info("💡 每个项目独立自治。")
