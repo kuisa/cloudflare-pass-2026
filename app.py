@@ -41,7 +41,7 @@ def save_config(tasks):
 # --- 页面全局配置 ---
 st.set_page_config(page_title="矩阵自动化控制内核", layout="wide", initial_sidebar_state="expanded")
 
-# --- 响应式 CSS (微缩版) ---
+# --- 响应式 CSS (微缩高亮版) ---
 st.markdown("""
     <style>
     .main { background-color: #05070a; color: #a0aec0; font-size: 0.85rem; }
@@ -53,6 +53,9 @@ st.markdown("""
     .active-tag { background-color: rgba(0, 255, 128, 0.1); color: #00ff80; border: 1px solid #00ff80; }
     @media (max-width: 768px) { [data-testid="column"] { width: 100% !important; flex: 1 1 100% !important; min-width: 100% !important; } }
     .stTextInput>div>div>input { background-color: #000 !important; color: #00ff80 !important; font-size: 0.8rem !important; }
+    
+    /* 时间高亮加粗样式 */
+    .highlight-time { color: #00e5ff !important; font-weight: 900 !important; background: rgba(0, 229, 255, 0.1); padding: 2px 5px; border-radius: 3px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -128,20 +131,32 @@ for i, task in enumerate(updated_tasks):
         task['email'] = c2.text_input("Email", value=task.get('email', ''), key=f"email_{i}")
         task['password'] = c3.text_input("Password", type="password", value=task.get('password', ''), key=f"pw_{i}")
 
-        if task.get('script') == "luneshost.py":
-            st.markdown("<div style='margin: 5px 0; border-top: 1px solid rgba(255,255,255,0.05);'></div>", unsafe_allow_html=True)
-            l1, l2, l3, l4 = st.columns([1.2, 1, 1, 1])
-            l1.caption("🛠️ Lunes 参数:")
-            task['stay_time'] = l2.number_input("停留(s)", 5, 300, task.get('stay_time', 10), key=f"stay_{i}")
-            task['refresh_count'] = l3.number_input("刷新(次)", 1, 20, task.get('refresh_count', 3), key=f"count_{i}")
-            task['refresh_interval'] = l4.number_input("间隔(s)", 1, 60, task.get('refresh_interval', 5), key=f"interval_{i}")
-
+        # --- 核心改动：周期行要在最前面 ---
         st.markdown("<div style='margin: 5px 0; border-top: 1px solid rgba(255,255,255,0.05);'></div>", unsafe_allow_html=True)
-        t1, t2, t3 = st.columns([1, 2, 2])
-        task['freq'] = t1.number_input("周期(天)", 1, 30, task.get('freq', 3), key=f"freq_{i}")
+        if task.get('script') == "luneshost.py":
+            lx_freq, lx1, lx2, lx3 = st.columns([1, 1, 1, 1])
+            task['freq'] = lx_freq.number_input("周期(天)", 1, 30, task.get('freq', 3), key=f"freq_{i}")
+            task['stay_time'] = lx1.number_input("停留(s)", 5, 300, task.get('stay_time', 10), key=f"stay_{i}")
+            task['refresh_count'] = lx2.number_input("刷新(次)", 1, 20, task.get('refresh_count', 3), key=f"count_{i}")
+            task['refresh_interval'] = lx3.number_input("间隔(s)", 1, 60, task.get('refresh_interval', 5), key=f"interval_{i}")
+        else:
+            # 其他脚本也将周期放在这一行的最前面
+            t_freq, t_empty1, t_empty2 = st.columns([1, 1, 1])
+            task['freq'] = t_freq.number_input("周期(天)", 1, 30, task.get('freq', 3), key=f"freq_{i}")
+
+        # --- 时间显示（带高亮） ---
+        st.markdown("<div style='margin: 5px 0; border-top: 1px solid rgba(255,255,255,0.05);'></div>", unsafe_allow_html=True)
+        t_time1, t_time2 = st.columns(2)
         last = task.get('last_run', "从未运行")
-        t2.caption(f"上次: {last}")
-        t3.caption(f"下次: { (datetime.strptime(last, '%Y-%m-%d %H:%M:%S').replace(tzinfo=bj_tz) + timedelta(days=task['freq'])).strftime('%m-%d %H:%M') if last != '从未运行' else '等待运行' }")
+        next_date = "等待运行"
+        if last != "从未运行":
+            try:
+                next_dt = (datetime.strptime(last, '%Y-%m-%d %H:%M:%S').replace(tzinfo=bj_tz) + timedelta(days=task['freq']))
+                next_date = next_dt.strftime('%m-%d %H:%M')
+            except: pass
+            
+        t_time1.markdown(f"上次运行: <span class='highlight-time'>{last}</span>", unsafe_allow_html=True)
+        t_time2.markdown(f"下次预定: <span class='highlight-time'>{next_date}</span>", unsafe_allow_html=True)
 
         st.markdown("<div style='margin: 8px 0;'></div>", unsafe_allow_html=True)
         btn_1, btn_2, btn_3, _ = st.columns([1, 1, 1, 1.5])
