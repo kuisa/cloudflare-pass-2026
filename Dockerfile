@@ -38,10 +38,12 @@ RUN apt-get update -qq && apt-get install -y -qq \
     && rm -rf /var/lib/apt/lists/*
 
 # 3. 安装 Google Chrome
-RUN wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
-    && apt-get update \
-    && apt-get install -y -qq /tmp/chrome.deb \
-    && rm -f /tmp/chrome.deb
+RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
+    echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list && \
+    apt-get update && apt-get install -y google-chrome-stable
+
+# Clean up
+RUN rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
