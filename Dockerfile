@@ -32,6 +32,9 @@ RUN apt-get update -qq && apt-get install -y -qq \
     fonts-noto-cjk \
     wget \
     curl \
+    gnupg \
+    ca-certificates \
+    lsb-release \
     unzip \
     libnss3-tools \
     --no-install-recommends \
