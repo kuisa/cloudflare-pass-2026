@@ -1,4 +1,4 @@
-FROM ubuntu:20.04
+FROM python:3.10-slim
 
 # 1. 设置系统环境变量
 ENV DEBIAN_FRONTEND=noninteractive
